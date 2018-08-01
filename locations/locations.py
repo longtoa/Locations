@@ -61,13 +61,23 @@ class Origin(Location):
                             'public transport': {},
                             'car': {}}
 
-    def get_times(self, mode='fastest', destination=None):
-        """Not using a property here because args should be accepted."""
-        if destination:
-            times = self.times[mode][destination]
-        else:
-            times = [time for time in self.times[mode].items()]
-        return times
+    def attribute_getter(fn):
+        def wrapped(self, mode=None, destination=None):
+            mode = self.mode if mode is None else mode
+            if destination:
+                resp = fn(self)[mode][destination]
+            else:
+                resp = [item for item in fn(self)[mode].items()]
+            return resp
+        return wrapped
+
+    @attribute_getter
+    def get_times(self):
+        return self.times
+
+    @attribute_getter
+    def get_impact(self):
+        return self.impact_time
 
     def set_times(self, mode, value, destination):
         if mode not in self.times:
@@ -84,7 +94,6 @@ class Origin(Location):
 
     @property
     def times(self):
-        """Not using a property here because args should be accepted."""
         return [time for time in self.times[self.mode].items()]
 
     @times.setter
