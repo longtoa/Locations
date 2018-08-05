@@ -1,27 +1,29 @@
 class Location:
-    """A location class that will serve as a template for origins and destinations"""
-    def __init__(self, postcode=None, address=None, geo=None):
+    """A Location is a class that holds location information (obviously). That information is address, postcode,
+    geo codes and information around travel times to other locations."""
 
+    def __init__(self, postcode=None, address=None, geo=None):
         if not postcode and not address:
                 raise TypeError('Either a postcode or an address should be provided')
         self.postcode = postcode
         self.address = address
         self.geo = geo
-        self.times = {'fastest',
-                      'public transport',
-                      'car'}
-        self.impact_time = {'fastest',
-                            'public transport',
-                            'car'}
-        self.mode = 'fastest'
+        self._geo = None
+        self.modes = {'fastest', 'public transport', 'car'}
+        self._mode = None
+        self._times = {mode: {} for mode in self.modes}
+        self._impact_times = {mode: {} for mode in self.modes}
 
     @property
     def geo(self):
-        return self.geo
+        return self._geo
 
     @geo.setter
     def geo(self, value):
         """geo should be set by passing a dict with keys 'lat', 'lng'"""
+        if value is None:
+            return
+
         if not isinstance(value, dict):
             raise TypeError("geo should be set by passing a dict got {} instead".format(value.__class__.__name__))
 
@@ -31,6 +33,9 @@ class Location:
         except KeyError:
             raise KeyError("geo should be set by passing a dict with keys 'lat', 'lng'")
 
+        self._geo = {'lat': lat,
+                     'lng': lng}
+
     def lat(self):
         return self.geo['lat']
 
@@ -38,14 +43,76 @@ class Location:
         return self.geo['lng']
 
     @property
+    def times(self):
+        return self.get_times()
+
+    @times.setter
+    def times(self, value):
+        raise AttributeError('Times should be set using the set_times method')
+
+    @property
+    def impact_times(self):
+        """Not using a property here because args should be accepted."""
+        return self.get_impacts()
+
+    @impact_times.setter
+    def impact_times(self, value):
+        raise AttributeError('Impact should be set using the set_impacts method')
+
+    @property
     def mode(self):
-        return self.mode
+        return self._mode
 
     @mode.setter
     def mode(self, value):
-        if value not in self.times:
+        if value not in self.modes:
             raise TypeError('Type should be either: fastest, public transport or car not '+value)
-        self.mode = value
+        self._mode = value
+
+    def check_params(self, mode, value, location):
+        """The base function that checks if the parameters that are going to be set are valid inputs."""
+        if mode not in self.modes:
+            raise TypeError('Mode should be either: fastest, public transport or car not ' + mode)
+        if not isinstance(value, int) and not isinstance(value, float):
+            raise TypeError('value represents minutes and should be an integer. got ' + value.__class__.__name__)
+        if not isinstance(location, Location) or location == self:
+            raise TypeError('destination should be of class Location. got ' + value.__class__.__name__)
+
+    def set_times(self, mode, value, to_location, mirror=True):
+        """The mirror boolean is used to identify from where the function was called. It is needed to prevent locations
+        from calling each other infinetly."""
+
+        self.check_params(mode, value, to_location)
+        self._times[mode][to_location] = value
+        if mirror:
+            to_location.set_times(mode, value, self, mirror=False)
+
+    def set_impacts(self, mode, value, to_location, mirror=True):
+        """The mirror boolean is used to identify from where the function was called. It is needed to prevent locations
+        from calling each other infinetly."""
+
+        self.check_params(mode, value, to_location)
+        self._impact_times[mode][to_location] = value
+        if mirror:
+            to_location.set_impacts(mode, value, self, mirror=False)
+
+    def attribute_getter(fn):
+        def wrapped(self, mode=None, to_location=None):
+            mode = self._mode if mode is None else mode
+            if to_location:
+                resp = fn(self)[mode][to_location]
+            else:
+                resp = [value for value in fn(self)[mode].values()]
+            return resp
+        return wrapped
+
+    @attribute_getter
+    def get_times(self):
+        return self._times
+
+    @attribute_getter
+    def get_impacts(self):
+        return self._impact_times
 
 
 class Origin(Location):
@@ -53,73 +120,28 @@ class Origin(Location):
     the destination objects are used as keys for the times"""
     def __init__(self, postcode=None, address=None, geo=None):
         super().__init__(postcode, address, geo)
-        self.current_destination = None
-        self.times = {'fastest': {},
-                      'public transport': {},
-                      'car': {}}
-        self.impact_time = {'fastest': {},
-                            'public transport': {},
-                            'car': {}}
-
-    def attribute_getter(fn):
-        def wrapped(self, mode=None, destination=None):
-            mode = self.mode if mode is None else mode
-            if destination:
-                resp = fn(self)[mode][destination]
-            else:
-                resp = [item for item in fn(self)[mode].items()]
-            return resp
-        return wrapped
-
-    @attribute_getter
-    def get_times(self):
-        return self.times
-
-    @attribute_getter
-    def get_impact(self):
-        return self.impact_time
-
-    def set_times(self, mode, value, destination):
-        if mode not in self.times:
-            raise TypeError('Mode should be either: fastest, public transport or car not '+mode)
-
-        if not isinstance(value, int):
-            raise TypeError('value represents minutes and should be an integer. got '+value.__class__.__name__)
-
-        if not isinstance(destination, Destination):
-            raise TypeError('destination should be of class Destination. got ' + value.__class__.__name__)
-
-        self.times[mode][destination] = value
-        destination.set_times(value, mode)
-
-    @property
-    def times(self):
-        return [time for time in self.times[self.mode].items()]
-
-    @times.setter
-    def times(self, value):
-        raise AttributeError('Times should be set using the set_times method')
+        self._current_destination = None
 
     @property
     def current_destination(self):
         return self.current_destination
 
     @current_destination.setter
-    def current_destination(self, value):
-        if not isinstance(value, Destination):
-            raise TypeError('Current_destination should be of the class Destination got '+ value.__class__.__name__)
+    def current_destination(self, destination):
+        if not isinstance(destination, Destination):
+            raise TypeError('Current_destination should be of the class Destination got ' + value.__class__.__name__)
 
-        if not all(value in d for d in self.times.values()):
+        if not all(destination in d for d in self.times.values()):
             raise TypeError('You can only set a destination as this origins current destination if all times '
                             '("fastest", "public transport", "car") are calculated for this destination.')
 
-        self.current_destination = value
+        self._current_destination = destination
 
         for mode, dict in self.times.items():
             for dest, time in dict.items():
-                impact = time - dict[value]
-                self.impact_time[mode][dest] = impact
-                value.set_impact(mode, impact)
+                impact = time - dict[destination]
+                self._impact_times[mode][dest] = impact
+                destination.set_impacts(mode, impact, self)
 
 
 class Destination(Location):
@@ -128,41 +150,20 @@ class Destination(Location):
 
     def __init__(self, address=None, postcode=None, geo=None):
         super().__init__(address, postcode, geo)
-        self.times = {'fastest': [],
-                      'public transport': [],
-                      'car': []}
 
-    @property
-    def times(self):
-        """Not using a property here because args should be accepted."""
-        return [time for time in self.times[self.mode].items()]
+    def check_mode(self, mode):
+        if mode is None:
+            return self._mode
 
-    @times.setter
-    def times(self, value):
-        raise AttributeError('Times should be set using the set_times method')
+        if mode not in self.modes:
+            raise TypeError
+        else:
+            return mode
 
-    def set_times(self, mode, time):
-        if mode not in self.times:
-            raise TypeError('Mode should be either: fastest, public transport or car not ' + mode)
-        if not isinstance(time, int):
-            raise TypeError('value represents minutes and should be an integer. got ' + value.__class__.__name__)
+    def avg_time(self, mode=None):
+        mode = self.check_mode(mode)
+        return sum(self._times[mode].values())/len(self._times[mode])
 
-        self.times[mode].append(time)
-
-    def set_impact(self, mode, impact):
-        if mode not in self.times:
-            raise TypeError('Mode should be either: fastest, public transport or car not ' + mode)
-        if not isinstance(impact, int):
-            raise TypeError('value represents minutes and should be an integer. got ' + value.__class__.__name__)
-
-        self.impact_time[mode].append(impact)
-
-    def avg_time(self):
-        """Mode is provided through the object (Destination.mode), not the method. To avoid having
-        to check whether the right mode is passed or not."""
-        return sum(self.times[self.mode])/len(self.times[self.mode])
-
-    def avg_impact(self):
-        """Mode is provided through the object (Destination.mode), not the method. To avoid having
-        to check whether the right mode is passed or not."""
-        return sum(self.impact_time[self.mode])/len(self.impact_time[self.mode])
+    def avg_impact(self, mode=None):
+        mode = self.check_mode(mode)
+        return sum(self._impact_times[mode].values())/len(self._impact_times[mode])
