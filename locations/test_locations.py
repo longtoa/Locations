@@ -123,8 +123,8 @@ class TestOrigin(unittest.TestCase):
 
         self.origin.current_destination = self.destination1
         self.assertEqual(self.origin.current_destination, self.destination1)
-        self.assertEqual(self.origin.get_impacts(to_location=self.destination2, mode='fastest'), 5)
-        self.assertEquals(self.destination2.get_impacts(to_location=self.origin, mode='fastest'), 5)
+        self.assertEqual(self.origin.get_impacts(to_location=self.destination2, mode='fastest'), -5)
+        self.assertEquals(self.destination2.get_impacts(to_location=self.origin, mode='fastest'), -5)
 
 
 class TestDestination(unittest.TestCase):
@@ -154,10 +154,16 @@ class TestDestination(unittest.TestCase):
         self.assertEqual(self.destination.impact_times, [10, 5])
 
     def test_avg_time(self):
+        self.destination.mode = 'car'
         self.assertEquals(self.destination.avg_time(), 27.5)
+        self.assertEquals(self.destination.avg_time('car'), 27.5)
+        self.assertEquals(self.destination.avg_time('fastest'), 0)
 
     def test_avg_impact(self):
+        self.destination.mode = 'car'
         self.assertEquals(self.destination.avg_impact(), 7.5)
+        self.assertEquals(self.destination.avg_impact('car'), 7.5)
+        self.assertEquals(self.destination.avg_impact('fastest'), 0)
 
 
 if __name__ == '__main__':

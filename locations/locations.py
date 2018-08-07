@@ -10,7 +10,7 @@ class Location:
         self.geo = geo
         self._geo = None
         self.modes = {'fastest', 'public transport', 'car'}
-        self._mode = None
+        self._mode = 'fastest'
         self._times = {mode: {} for mode in self.modes}
         self._impact_times = {mode: {} for mode in self.modes}
 
@@ -99,6 +99,7 @@ class Location:
     def attribute_getter(fn):
         def wrapped(self, mode=None, to_location=None):
             mode = self._mode if mode is None else mode
+            print(mode)
             if to_location:
                 resp = fn(self)[mode][to_location]
             else:
@@ -124,24 +125,24 @@ class Origin(Location):
 
     @property
     def current_destination(self):
-        return self.current_destination
+        return self._current_destination
 
     @current_destination.setter
-    def current_destination(self, destination):
-        if not isinstance(destination, Destination):
-            raise TypeError('Current_destination should be of the class Destination got ' + value.__class__.__name__)
+    def current_destination(self, current_dest):
+        if not isinstance(current_dest, Destination):
+            raise TypeError('Current_destination should be of the class Destination got ' + current_dest.__class__.__name__)
 
-        if not all(destination in d for d in self.times.values()):
+        if not all(current_dest in d for d in self._times.values()):
             raise TypeError('You can only set a destination as this origins current destination if all times '
                             '("fastest", "public transport", "car") are calculated for this destination.')
 
-        self._current_destination = destination
+        self._current_destination = current_dest
 
-        for mode, dict in self.times.items():
+        for mode, dict in self._times.items():
             for dest, time in dict.items():
-                impact = time - dict[destination]
+                impact = time - dict[current_dest]       # Decrease in time compared to current is negative.
                 self._impact_times[mode][dest] = impact
-                destination.set_impacts(mode, impact, self)
+                dest.set_impacts(mode, impact, self, mirror=False)
 
 
 class Destination(Location):
@@ -162,8 +163,14 @@ class Destination(Location):
 
     def avg_time(self, mode=None):
         mode = self.check_mode(mode)
-        return sum(self._times[mode].values())/len(self._times[mode])
+        try:
+            return sum(self._times[mode].values())/len(self._times[mode])
+        except ZeroDivisionError:
+            return 0
 
     def avg_impact(self, mode=None):
         mode = self.check_mode(mode)
-        return sum(self._impact_times[mode].values())/len(self._impact_times[mode])
+        try:
+            return sum(self._impact_times[mode].values())/len(self._impact_times[mode])
+        except ZeroDivisionError:
+            return 0
