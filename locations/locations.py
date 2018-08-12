@@ -8,6 +8,7 @@ class Location:
         self.postcode = postcode
         self.address = address
         self.geo = geo
+        self.google_place_id = None
         self._geo = None
         self.modes = {'fastest', 'public transport', 'car'}
         self._mode = 'fastest'
